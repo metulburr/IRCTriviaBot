@@ -182,15 +182,37 @@ class IrcBot:
             if self.game_in_progress:
                 if self.text.lower() == self.answer.lower():
                     self.say('{} recieved from {}'.format(self.text.lower(), self.username))
-                
-            '''
-            #self.check_cmd()
-            thread = threading.Thread(target=self.check_cmd)
-            thread.start()
-            thread2 = threading.Thread(target=self.play)
-            thread2.start()
-            self.play()
-            '''
+                count = 0
+                keys = self.keywords()
+                for word in self.text.lower():
+                    for k in keys:
+                        #if word in keys.lower():
+                        if word == k.lower():
+                            count += 1
+                if count == len(keys):
+                    if keys:
+                        self.say('{} recieved keywords from {}'.format(keys, self.username))
+
+                    
+                    
+    def keywords(self):
+        search = r'\b[A-Z]{2,}|[0-9]+\b'   #.format(word)
+        res = re.findall(search, self.answer)
+        #print(res)
+        
+        for num in res:
+            #remove estimated dates as keywords which lay after "in" which is considered description and not answer
+            if 'in {}'.format(num) in self.answer:
+                res.remove(str(num))
+        return res
+        '''
+        #self.check_cmd()
+        thread = threading.Thread(target=self.check_cmd)
+        thread.start()
+        thread2 = threading.Thread(target=self.play)
+        thread2.start()
+        self.play()
+        '''
             
     def not_cmd(self, cmd):
         return '{0}: "{1}" is not one of my commands'.format(self.username, cmd)
@@ -269,6 +291,7 @@ class IrcBot:
     def play(self):
         timer = 20 
         def func(arg):
+            self.say('TEST: keywords are: {}'.format(self.keywords()))
             time.sleep(5) #spacer between questions
             self.say('15 seconds...')
             time.sleep(5)
@@ -279,8 +302,8 @@ class IrcBot:
             self.say(arg)
             
         while self.game_in_progress:
-            thread = threading.Thread(target=self.check_cmd)
-            thread.start()
+            #thread = threading.Thread(target=self.check_cmd)
+            #thread.start()
             
             url = 'http://www.triviacafe.com/random/'
             doc = lxml.html.parse(url)
@@ -328,3 +351,4 @@ if __name__ == '__main__':
         print(show_help)
         
         #stone
+
