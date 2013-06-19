@@ -1,3 +1,13 @@
+
+
+
+#parsing answer modifications:
+	#FRANK SINATRA  1915-1998    ::::where the dates were info but it parsed it as answer
+	#CHINA   - 3 times           ::::where china was the only answer
+
+
+
+
 import sys
 import socket
 import string
@@ -68,7 +78,9 @@ class IrcBot:
         self.realname = "trivia_bot"
         self.list_cmds = {
             'help':(lambda:self.help()),
-            'trivia':lambda:self.trivia()
+            'trivia':lambda:self.trivia(),
+            'next':lambda:self.next_q(),
+            'score':lambda:self.score()
             }
         
         self.op = ['metulburr','Awesome-O', 'robgraves','corp769',
@@ -82,6 +94,8 @@ class IrcBot:
         self.answer = ''
         self.question = ''
         self.game_in_progress = False
+        self.go_to_next = False
+        self.database = {}
         
         self.sock = self.irc_conn()
         self.wait_event()
@@ -171,30 +185,40 @@ class IrcBot:
             self.upon_join()
             self.upon_leave()
             
-            '''
-            if self.text.split()[1:][0][0] == 'start':
-                self.game_in_progress = True
-            elif self.text.split()[1:][0][0] == 'stop':
-                self.game_in_progress = False
-            '''
-            
             self.check_cmd()
             if self.game_in_progress:
-                if self.text.lower() == self.answer.lower():
-                    self.say('{} recieved from {}'.format(self.text.lower(), self.username))
+                
                 count = 0
                 keys = self.keywords()
-                for word in self.text.lower():
+                
+                if self.text.lower() == self.answer.lower():
+                    self.say('{} recieved from {}'.format(self.text.lower(), self.username))
+                    #self.database.update({self.username:self.score_amount()})
+                    self.database_update()
+                    self.go_to_next = True
+                elif len(keys) > 1:
                     for k in keys:
-                        #if word in keys.lower():
-                        if word == k.lower():
-                            count += 1
-                if count == len(keys):
-                    if keys:
-                        self.say('{} recieved keywords from {}'.format(keys, self.username))
+                        for word in self.text.split():
+                            if word.lower().strip() == k.lower().strip():
+                                count += 1
+                    #self.say('count is: {}'.format(count))
+                    if count == len(keys):
+                        if keys:
+                            self.say('{} recieved keywords from {}'.format(keys, self.username))
+                            #self.database.update({self.username:self.score_amount()})
+                            self.database_update()
+                            self.go_to_next = True
 
-                    
-                    
+    def score_amount(self):
+        return 100
+        
+    def database_update(self):
+        #need to ad to database instead of buffer
+        try:
+            self.database[self.username] += self.score_amount()
+        except KeyError:
+            self.database.update({self.username:self.score_amount()})
+
     def keywords(self):
         search = r'\b[A-Z]{2,}|[0-9]+\b'   #.format(word)
         res = re.findall(search, self.answer)
@@ -205,14 +229,6 @@ class IrcBot:
             if 'in {}'.format(num) in self.answer:
                 res.remove(str(num))
         return res
-        '''
-        #self.check_cmd()
-        thread = threading.Thread(target=self.check_cmd)
-        thread.start()
-        thread2 = threading.Thread(target=self.play)
-        thread2.start()
-        self.play()
-        '''
             
     def not_cmd(self, cmd):
         return '{0}: "{1}" is not one of my commands'.format(self.username, cmd)
@@ -225,40 +241,45 @@ class IrcBot:
                 self.say(returner)
 
     def commands(self, cmd, *args):
-        if not args:
-            self.help('trivia')
-            return
-        try:
-            if args[0][0] == 'start':
-                if not self.game_in_progress:
-                    self.game_in_progress = True
-                    thread = threading.Thread(target=self.play)
-                    thread.start()
-            elif args[0][0] == 'stop':
-                self.game_in_progress = False
-        except IndexError:
-            self.help('trivia')
-        
-        return
-        
-        
-        try:
-            arg1 = args[0][0]
-        except IndexError:
-            arg1 = ''
-        try:
-            arg2 = args[0][1]
-        except IndexError:
-            arg2 = ''
+        #if not args:
+        #    self.help('trivia')
+        #    return
+        if args:
+            try:
+                if args[0][0] == 'start':
+                    if not self.game_in_progress:
+                        self.game_in_progress = True
+                        thread = threading.Thread(target=self.play)
+                        thread.start()
+                elif args[0][0] == 'stop':
+                    self.game_in_progress = False
+                #else:
+                #    self.list_cmds[cmd]()
+            except IndexError:
+                #self.help('trivia')
+                #return
+                ...
+            
 
-        if cmd in self.list_cmds:
-            if not arg1: #if no arguments
-                self.list_cmds[cmd]()
-            else: #argument with function, run function directly
-                if cmd == 'help':# and arg1 in self.list_cmds.keys():
-                    self.help(arg1)
-                elif cmd == 'trivia':
-                    self.trivia(args)
+        
+        #else:
+
+            #if cmd in self.list_cmds:
+            #    if not args: #if no arguments
+            #        self.list_cmds[cmd]()
+            #    else: #argument with function, run function directly
+        #if cmd == 'help':# and arg1 in self.list_cmds.keys():
+        #    self.help(args[0])
+        #elif cmd == 'trivia':
+        #    self.trivia(args)
+        if cmd == 'next':
+            if self.game_in_progress:
+                self.go_to_next = True
+        elif cmd == 'score':
+            try:
+                self.say('{}: {}'.format(self.username, self.database[self.username]))
+            except KeyError:
+                self.say('{}: 0'.format(self.username))
             
     def help(self, arg=None):
         helper = '{0}: {1}help  --show all commands'.format(self.username,self.contact)
@@ -272,39 +293,47 @@ class IrcBot:
         else:
             if arg == 'help':
                 self.say(helper)
-            if arg == 'trivia':
-                self.say(triv)
-
-    '''
-    def trivia(self, args=None):
-
-
-        if not args:
-            self.help('trivia')
-            return
-        elif args[0][0] == 'start':
-            self.game_in_progress = True
-        elif args[0][0] == 'stop':
-            self.game_in_progress = False
-    '''
+            #if arg == 'trivia':
+            #    self.say(triv)
             
     def play(self):
         timer = 20 
-        def func(arg):
+        def countdown(arg):
             self.say('TEST: keywords are: {}'.format(self.keywords()))
-            time.sleep(5) #spacer between questions
+            t = 5
+            if self.go_to_next:
+                t = 0
+                return
+            time.sleep(t) #spacer between questions
+            if self.go_to_next:
+                t = 0
+                return
             self.say('15 seconds...')
-            time.sleep(5)
+            
+            time.sleep(t)
+            if self.go_to_next:
+                t = 0
+                return
             self.say('10 seconds...')
-            time.sleep(5)
+            
+            time.sleep(t)
+            if self.go_to_next:
+                t = 0
+                return
             self.say('5 seconds...')
-            time.sleep(5)
-            self.say(arg)
+            
+            time.sleep(t)
+            if self.go_to_next:
+                t = 0
+                return
+                
+            if not self.go_to_next: #if no one guessed or no one asked for next, display answer
+                self.say(arg)
             
         while self.game_in_progress:
             #thread = threading.Thread(target=self.check_cmd)
             #thread.start()
-            
+            self.go_to_next = False
             url = 'http://www.triviacafe.com/random/'
             doc = lxml.html.parse(url)
 
@@ -323,11 +352,19 @@ class IrcBot:
             self.answer = a.group(1).strip()
             #print(answer)
 
-            thread = threading.Thread(target=func, args=(self.answer,))
+            thread = threading.Thread(target=countdown, args=(self.answer,))
             thread.start()
-            print(self.answer)
-            time.sleep(timer)
-            ###make pause for 
+            #t = Threader(target=func, args=(self.answer,))
+            #t.start()
+            #print(self.answer)
+            c = 0
+            while c < timer:
+                time.sleep(1)
+                c += 1
+                if self.go_to_next:
+                    break
+                
+            #time.sleep(timer)
 
     
     def create_pkl(picklepath, obj):
@@ -339,6 +376,32 @@ class IrcBot:
         files = open(picklepath, 'rb')
         obj = pickle.load(files)
         return obj
+
+
+
+class Threader(threading.Thread):
+	def __init__(self, target, args):
+		self._should_stop = threading.Event(target, args)
+		threading.Thread.__init__(self)
+		
+	def count(self):
+		return threading.active_count()
+
+	def run(self):
+		'''while thread start'''
+		while not self._should_stop.is_set():
+			...
+		self._should_stop.clear()
+
+	def stop(self):
+		'''while thread stop'''
+		self._should_stop.set()
+		while self._should_stop.is_set():
+			...
+            
+            
+            
+            
 
 if __name__ == '__main__':
     connect = cmd_arg()
